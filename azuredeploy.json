@@ -1,0 +1,103 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "appInsName": {
+        "type": "string",
+        "metadata": {
+          "description": "App insights resource name."
+        }
+      },
+      "AspNetCoreEnvironment":{
+        "type": "string",
+        "metadata": {
+          "description": "Asp.net core environment usually: Development,Staging,Production"
+        }
+      },
+      "databaseAccountName": {
+        "type": "string",
+        "metadata": {
+          "description": "The DocumentDB database account name."
+        }
+      },
+      "uniqueDnsNameForWebApp": {
+        "type": "string",
+        "metadata": {
+          "description": "Relative DNS name for the WebApps, must be globally unique.  An index will be appended for each Web App."
+        }
+      }
+    },
+    "variables": {
+      "webAppLocation": "West Europe",
+      "databaseAccountTier": "Standard",
+      "appServicePlan": "LifeTimerServicePlan"
+    },
+  
+    "resources": [
+      {
+        "apiVersion": "2014-04-01",
+        "name": "[parameters('appInsName')]",
+        "type": "Microsoft.Insights/components",
+        "location": "[resourceGroup().location]",
+        "properties": {
+          "ApplicationId": "[parameters('appInsName')]"
+        }
+      },
+      {
+        "apiVersion": "2015-04-08",
+        "type": "Microsoft.DocumentDb/databaseAccounts",
+        "name": "[parameters('databaseAccountName')]",
+        "location": "[resourceGroup().location]",
+        "properties": {
+          "name": "[parameters('databaseAccountName')]",
+          "databaseAccountOfferType": "[variables('databaseAccountTier')]",
+          "locations": [
+            {
+              "locationName": "[resourceGroup().location]",
+              "failoverPriority": 0
+            }
+          ]
+        }
+      },
+      {
+        "apiVersion": "2015-08-01",
+        "name": "[variables('appServicePlan')]",
+        "type": "Microsoft.Web/serverfarms",
+        "location": "[variables('webAppLocation')]",
+        "sku": {
+          "name": "S1",
+          "tier": "Standard"
+        }
+      },
+      {
+        "apiVersion": "2015-08-01",
+        "name": "[parameters('uniqueDnsNameForWebApp')]",
+        "type": "Microsoft.Web/sites",
+        "location": "[variables('webAppLocation')]",
+        "dependsOn": [ "[variables('appServicePlan')]" ],
+        "properties": {
+          "serverFarmId": "[variables('appServicePlan')]",
+          "siteConfig": {
+            "phpVersion": "off",
+            "appSettings": [{
+              "Name": "DOCUMENTDB_ENDPOINT",
+              "Value": "[reference(concat('Microsoft.DocumentDb/databaseAccounts/', parameters('databaseAccountName'))).documentEndpoint]"
+            },
+            {
+              "Name": "DOCUMENTDB_PRIMARY_KEY",
+              "Value": "[listKeys(resourceId('Microsoft.DocumentDb/databaseAccounts', parameters('databaseAccountName')), '2015-04-08').primaryReadonlyMasterKey]"
+            },
+            {
+                "Name": "ApplicationInsights:InstrumentationKey",
+                "Value": "[reference(concat('Microsoft.Insights/components/', parameters('appInsName'))).instrumentationKey]"
+            },
+            {
+              "Name": "ASPNETCORE_ENVIRONMENT",
+              "Value": "[parameters('AspNetCoreEnvironment')]"
+            }]
+          }
+        }
+      }
+    ]
+  }
+  
